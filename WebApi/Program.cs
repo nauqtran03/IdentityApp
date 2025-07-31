@@ -2,11 +2,13 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
+using System.Linq;
 using System.Text;
 using WebApi.Data;
 using WebApi.Models;
@@ -35,10 +37,10 @@ namespace WebApi
             builder.Services.AddIdentityCore<User>(options =>
             {
                 //password configuration
-                options.Password.RequireDigit = false;
-                options.Password.RequireLowercase = false;
-                options.Password.RequireNonAlphanumeric = false;
-                options.Password.RequireUppercase = false;
+                options.Password.RequireDigit = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireNonAlphanumeric = true;
+                options.Password.RequireUppercase = true;
                 options.Password.RequiredLength = 6;
                 //for email confirmation
                 options.SignIn.RequireConfirmedAccount = true;
@@ -68,7 +70,34 @@ namespace WebApi
                     };
                 });
             builder.Services.AddScoped<JWTService>();
+            builder.Services.AddCors();
+
+            builder.Services.Configure<ApiBehaviorOptions>(options =>
+            {
+                options.InvalidModelStateResponseFactory = actionContext =>
+                {
+                    var errors = actionContext.ModelState
+                    .Where(x => x.Value.Errors.Count > 0)
+                    .SelectMany(x => x.Value.Errors)
+                    .Select(x => x.ErrorMessage).ToArray();
+
+                    var toReturn = new
+                    {
+                        Errors = errors,
+                    };
+                    return new BadRequestObjectResult(toReturn);
+                };
+            });
+
             var app = builder.Build();
+
+            app.UseCors(options =>
+            {
+                options.AllowAnyMethod() // allow any method (GET, POST, PUT, DELETE)
+                       .AllowAnyHeader()
+                       .AllowCredentials()
+                       .WithOrigins(builder.Configuration["JWT:ClientUrl"]); 
+            });
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
